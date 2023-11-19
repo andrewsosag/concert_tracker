@@ -1,7 +1,9 @@
 import requests
-import sqlite3
+import psycopg2
+from psycopg2 import sql
+import os
 import datetime
-from config import SEATGEEK_CLIENT_ID, SEATGEEK_CLIENT_SECRET
+from config import SEATGEEK_CLIENT_ID, SEATGEEK_CLIENT_SECRET, DATABASE_URL
 
 def fetch_events():
     api_url = 'https://api.seatgeek.com/2/events'
@@ -43,16 +45,11 @@ def parse_event_data(events):
     return parsed_data
 
 def create_database():
-    conn = sqlite3.connect('events.db')
-    c = conn.cursor()
-
-    # Drop the existing table if it exists
-    c.execute('DROP TABLE IF EXISTS events')
-
-    # Create the table with the new schema
-    c.execute('''
-        CREATE TABLE events (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute('''
+        CREATE TABLE IF NOT EXISTS events (
+            id SERIAL PRIMARY KEY,
             event_id TEXT,
             event_name TEXT,
             event_date TEXT,
@@ -66,27 +63,22 @@ def create_database():
     conn.close()
 
 def insert_or_update_event(event):
-    conn = sqlite3.connect('events.db')
-    c = conn.cursor()
-
-    # Check if the event already exists
-    c.execute("SELECT * FROM events WHERE event_id = ?", (event['event_id'],))
-    exists = c.fetchone()
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute("SELECT * FROM events WHERE event_id = %s", (event['event_id'],))
+    exists = cur.fetchone()
 
     if exists:
-        # Update the existing event
-        c.execute('''
+        cur.execute('''
             UPDATE events 
-            SET lowest_price = ?, highest_price = ? 
-            WHERE event_id = ?
+            SET lowest_price = %s, highest_price = %s 
+            WHERE event_id = %s
         ''', (event['lowest_price'], event['highest_price'], event['event_id']))
     else:
-        # Insert a new event
-        c.execute('''
+        cur.execute('''
             INSERT INTO events (event_id, event_name, event_date, venue_name, city_name, lowest_price, highest_price)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
         ''', (event['event_id'], event['event_name'], event['event_date'], event['venue_name'], event['city_name'], event['lowest_price'], event['highest_price']))
-    
     conn.commit()
     conn.close()
 
@@ -95,28 +87,27 @@ def update_data(parsed_data):
         insert_or_update_event(event)
 
 def run_query(query):
-    conn = sqlite3.connect('events.db')
-    c = conn.cursor()
-    c.execute(query)
-    results = c.fetchall()
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute(query)
+    results = cur.fetchall()
     conn.close()
     return results
 
 def clear_data():
-    conn = sqlite3.connect('events.db')
-    c = conn.cursor()
-    c.execute('DELETE FROM events')
-    c.execute('UPDATE sqlite_sequence SET seq = 0 WHERE name = "events"')  # Reset auto-increment counter
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute('DELETE FROM events')
     conn.commit()
     conn.close()
 
 def delete_past_events():
     today = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
-    conn = sqlite3.connect('events.db')
-    c = conn.cursor()
-    c.execute('''
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute('''
         DELETE FROM events 
-        WHERE event_date < ?
+        WHERE event_date < %s
     ''', (today,))
     conn.commit()
     conn.close()
@@ -127,14 +118,10 @@ def main():
     if events:
         parsed_data = parse_event_data(events)
         update_data(parsed_data)
-
-        # Optionally, print the top 25 events for verification
         top_25_query = "SELECT * FROM events ORDER BY event_date LIMIT 25;"
         top_25_events = run_query(top_25_query)
         for event in top_25_events:
             print(event)
-
-        # Delete past events
         delete_past_events()
 
 if __name__ == '__main__':
