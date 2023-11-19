@@ -29,8 +29,8 @@ venv.bak/
 *.sqlite3
 *.sqlite3-journal
 
-# PyCharm (if you use it)
-.idea/
-
 # OS generated files
 .DS_Store
+
+# API Keys
+config.py
