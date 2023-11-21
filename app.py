@@ -24,7 +24,8 @@ def fetch_events():
 def parse_event_data(events):
     parsed_data = []
     for event in events:
-        event_id = event['id']  # Assuming 'id' is the unique identifier provided by the API
+        event_id = str(event['id']) # Assuming 'id' is the unique identifier provided by the API
+        # event_id = event['id'] 
         event_name = event['title']
         event_date = event['datetime_local']
         venue_name = event['venue']['name']
