@@ -7,19 +7,27 @@ from config import SEATGEEK_CLIENT_ID, SEATGEEK_CLIENT_SECRET, DATABASE_URL
 
 def fetch_events():
     api_url = 'https://api.seatgeek.com/2/events'
-    params = {
-        'client_id': SEATGEEK_CLIENT_ID,
-        'taxonomies.name': 'concert',  # Filter for music concerts
-        'per_page': 500,  # Fetch top 500 events
-        'sort': 'score.desc'  # Sort by popularity score, descending
-    }
+    all_events = []
+    page = 1
+    while len(all_events) < 5000:
+        params = {
+            'client_id': SEATGEEK_CLIENT_ID,
+            'taxonomies.name': 'concert',
+            'per_page': 500,
+            'sort': 'score.desc',
+            'page': page
+        }
+        response = requests.get(api_url, params=params)
+        if response.status_code != 200:
+            print(f"Failed to fetch events: {response.status_code}, Response: {response.text}")
+            break
+        events = response.json()['events']
+        if not events:
+            break
+        all_events.extend(events)
+        page += 1
+    return all_events[:5000]  # Limit to first 5000 events
 
-    response = requests.get(api_url, params=params)
-    if response.status_code == 200:
-        return response.json()['events']
-    else:
-        print(f"Failed to fetch events: {response.status_code}, Response: {response.text}")
-        return None
     
 def parse_event_data(events):
     parsed_data = []
@@ -48,38 +56,71 @@ def parse_event_data(events):
 def create_database():
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
+
+    # Drop existing tables if they exist
+    cur.execute("DROP TABLE IF EXISTS event_prices CASCADE")
+    cur.execute("DROP TABLE IF EXISTS events CASCADE")
+
+    # Create events table
     cur.execute('''
-        CREATE TABLE IF NOT EXISTS events (
+        CREATE TABLE events (
             id SERIAL PRIMARY KEY,
-            event_id TEXT,
+            event_id TEXT UNIQUE NOT NULL,
             event_name TEXT,
             event_date TEXT,
             venue_name TEXT,
-            city_name TEXT,
+            city_name TEXT
+        )
+    ''')
+
+    # Create event_prices table
+    cur.execute('''
+        CREATE TABLE event_prices (
+            event_id TEXT NOT NULL,
+            date DATE NOT NULL,
             lowest_price REAL,
-            highest_price REAL
+            highest_price REAL,
+            PRIMARY KEY (event_id, date),
+            FOREIGN KEY (event_id) REFERENCES events(event_id)
         )
     ''')
     conn.commit()
     conn.close()
 
+
+
+
+
+
 def insert_or_update_event(event):
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
-    cur.execute("SELECT * FROM events WHERE event_id = %s", (event['event_id'],))
-    exists = cur.fetchone()
 
-    if exists:
+    # Check if the event already exists in 'events' table
+    cur.execute("SELECT * FROM events WHERE event_id = %s", (event['event_id'],))
+    if not cur.fetchone():
+        # Insert a new event
         cur.execute('''
-            UPDATE events 
+            INSERT INTO events (event_id, event_name, event_date, venue_name, city_name)
+            VALUES (%s, %s, %s, %s, %s)
+        ''', (event['event_id'], event['event_name'], event['event_date'], event['venue_name'], event['city_name']))
+
+    # Update or insert into 'event_prices' table
+    cur.execute("SELECT * FROM event_prices WHERE event_id = %s AND date = CURRENT_DATE", (event['event_id'],))
+    if cur.fetchone():
+        # Update the existing price data
+        cur.execute('''
+            UPDATE event_prices 
             SET lowest_price = %s, highest_price = %s 
-            WHERE event_id = %s
+            WHERE event_id = %s AND date = CURRENT_DATE
         ''', (event['lowest_price'], event['highest_price'], event['event_id']))
     else:
+        # Insert new price data
         cur.execute('''
-            INSERT INTO events (event_id, event_name, event_date, venue_name, city_name, lowest_price, highest_price)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-        ''', (event['event_id'], event['event_name'], event['event_date'], event['venue_name'], event['city_name'], event['lowest_price'], event['highest_price']))
+            INSERT INTO event_prices (event_id, date, lowest_price, highest_price)
+            VALUES (%s, CURRENT_DATE, %s, %s)
+        ''', (event['event_id'], event['lowest_price'], event['highest_price']))
+
     conn.commit()
     conn.close()
 
@@ -103,7 +144,7 @@ def clear_data():
     conn.close()
 
 def delete_past_events():
-    today = datetime.datetime.now().strftime("%Y-%m-%dT%H:%M:%S")
+    today = datetime.datetime.now().strftime("%Y-%m-%dT00:00:00")  # Keep today's concerts
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     cur.execute('''
@@ -113,17 +154,37 @@ def delete_past_events():
     conn.commit()
     conn.close()
 
+
+def clear_old_price_data():
+    """
+    Clear price data that is older than 90 days.
+    """
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    ninety_days_ago = (datetime.datetime.now() - datetime.timedelta(days=90)).strftime("%Y-%m-%d")
+    cur.execute("DELETE FROM event_prices WHERE date < %s", (ninety_days_ago,))
+    conn.commit()
+    conn.close()
+
+def delete_past_events():
+    """
+    Delete events that have already occurred.
+    """
+    today = datetime.datetime.now().strftime("%Y-%m-%d")  # Keep today's concerts
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+    cur.execute("DELETE FROM events WHERE event_date < %s", (today,))
+    conn.commit()
+    conn.close()
+
 def main():
     create_database()
     events = fetch_events()
     if events:
         parsed_data = parse_event_data(events)
         update_data(parsed_data)
-        top_25_query = "SELECT * FROM events ORDER BY event_date LIMIT 25;"
-        top_25_events = run_query(top_25_query)
-        for event in top_25_events:
-            print(event)
         delete_past_events()
+        clear_old_price_data()
 
 if __name__ == '__main__':
     main()
