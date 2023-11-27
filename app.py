@@ -1,8 +1,13 @@
+import os
 import requests
 import psycopg2
 from psycopg2 import extras
 import datetime
-from config import SEATGEEK_CLIENT_ID, SEATGEEK_CLIENT_SECRET, DATABASE_URL
+
+# Fetching values from environment variables
+SEATGEEK_CLIENT_ID = os.environ.get('SEATGEEK_CLIENT_ID')
+SEATGEEK_CLIENT_SECRET = os.environ.get('SEATGEEK_CLIENT_SECRET')
+DATABASE_URL = os.environ.get('DATABASE_URL')
 
 def fetch_events():
     api_url = 'https://api.seatgeek.com/2/events'
@@ -28,7 +33,7 @@ def fetch_events():
         page += 1
     return all_events[:5000]  # Limit to first 5000 events
 
-    
+
 def parse_event_data(events):
     parsed_data = []
     for event in events:
@@ -52,6 +57,7 @@ def parse_event_data(events):
         })
 
     return parsed_data
+
 
 def create_database():
     conn = psycopg2.connect(DATABASE_URL)
@@ -88,10 +94,6 @@ def create_database():
     conn.close()
 
 
-
-
-
-
 def insert_or_update_event(event):
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
@@ -125,13 +127,6 @@ def insert_or_update_event(event):
     conn.close()
 
 
-# def update_data(parsed_data):
-#    print("Updating events and prices in the database...")
-#    for i, event in enumerate(parsed_data, start=1):
-#        insert_or_update_event(event)
-#        if i % 100 == 0:
-#            print(f"Processed {i} of {len(parsed_data)} events.")
-
 def run_query(query):
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
@@ -140,12 +135,14 @@ def run_query(query):
     conn.close()
     return results
 
+
 def clear_data():
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
     cur.execute('DELETE FROM events')
     conn.commit()
     conn.close()
+
 
 def delete_past_events():
     today = datetime.datetime.now().strftime("%Y-%m-%dT00:00:00")  # Keep today's concerts
@@ -170,6 +167,7 @@ def clear_old_price_data():
     conn.commit()
     conn.close()
 
+
 def delete_past_events():
     """
     Delete events that have already occurred.
@@ -180,6 +178,7 @@ def delete_past_events():
     cur.execute("DELETE FROM events WHERE event_date < %s", (today,))
     conn.commit()
     conn.close()
+
 
 def batch_update_events(parsed_data):
     conn = psycopg2.connect(DATABASE_URL)
@@ -209,6 +208,7 @@ def batch_update_events(parsed_data):
     cur.close()
     conn.close()
     print(f"Processed batch of {len(parsed_data)} events.")
+
 
 def main():
     print("Starting script...")
