@@ -1,7 +1,6 @@
 import requests
 import psycopg2
-from psycopg2 import sql
-import os
+from psycopg2 import extras
 import datetime
 from config import SEATGEEK_CLIENT_ID, SEATGEEK_CLIENT_SECRET, DATABASE_URL
 
@@ -22,6 +21,7 @@ def fetch_events():
             print(f"Failed to fetch events: {response.status_code}, Response: {response.text}")
             break
         events = response.json()['events']
+        print(f"Fetched page {page} with {len(events)} events.")
         if not events:
             break
         all_events.extend(events)
@@ -124,9 +124,13 @@ def insert_or_update_event(event):
     conn.commit()
     conn.close()
 
-def update_data(parsed_data):
-    for event in parsed_data:
-        insert_or_update_event(event)
+
+# def update_data(parsed_data):
+#    print("Updating events and prices in the database...")
+#    for i, event in enumerate(parsed_data, start=1):
+#        insert_or_update_event(event)
+#        if i % 100 == 0:
+#            print(f"Processed {i} of {len(parsed_data)} events.")
 
 def run_query(query):
     conn = psycopg2.connect(DATABASE_URL)
@@ -177,14 +181,45 @@ def delete_past_events():
     conn.commit()
     conn.close()
 
+def batch_update_events(parsed_data):
+    conn = psycopg2.connect(DATABASE_URL)
+    cur = conn.cursor()
+
+    # Prepare batch data for events
+    events_batch = [(e['event_id'], e['event_name'], e['event_date'], e['venue_name'], e['city_name']) for e in parsed_data]
+    # Prepare batch data for event prices
+    prices_batch = [(e['event_id'], datetime.date.today(), e['lowest_price'], e['highest_price']) for e in parsed_data]
+
+    # Batch insert events
+    psycopg2.extras.execute_batch(cur, """
+        INSERT INTO events (event_id, event_name, event_date, venue_name, city_name) 
+        VALUES (%s, %s, %s, %s, %s)
+        ON CONFLICT (event_id) DO NOTHING
+    """, events_batch)
+
+    # Batch insert or update prices
+    psycopg2.extras.execute_batch(cur, """
+        INSERT INTO event_prices (event_id, date, lowest_price, highest_price) 
+        VALUES (%s, %s, %s, %s)
+        ON CONFLICT (event_id, date) 
+        DO UPDATE SET lowest_price = EXCLUDED.lowest_price, highest_price = EXCLUDED.highest_price
+    """, prices_batch)
+
+    conn.commit()
+    cur.close()
+    conn.close()
+    print(f"Processed batch of {len(parsed_data)} events.")
+
 def main():
+    print("Starting script...")
     create_database()
     events = fetch_events()
     if events:
         parsed_data = parse_event_data(events)
-        update_data(parsed_data)
+        batch_update_events(parsed_data)  # Replace update_data with batch_update_events
         delete_past_events()
         clear_old_price_data()
+    print("Script completed successfully.")
 
 if __name__ == '__main__':
     main()
