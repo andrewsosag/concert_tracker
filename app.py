@@ -145,13 +145,13 @@ def clear_data():
 
 
 def delete_past_events():
-    today = datetime.datetime.now().strftime("%Y-%m-%dT00:00:00")  # Keep today's concerts
+    """
+    Delete events that have already occurred.
+    """
+    today = datetime.datetime.now().strftime("%Y-%m-%d")  # Keep today's concerts
     conn = psycopg2.connect(DATABASE_URL)
     cur = conn.cursor()
-    cur.execute('''
-        DELETE FROM events 
-        WHERE event_date < %s
-    ''', (today,))
+    cur.execute("DELETE FROM events WHERE event_date < %s", (today,))
     conn.commit()
     conn.close()
 
@@ -210,7 +210,7 @@ def batch_update_events(parsed_data):
     print(f"Processed batch of {len(parsed_data)} events.")
 
 
-def main():
+def main(event, context):
     print("Starting script...")
     create_database()
     events = fetch_events()
@@ -222,4 +222,4 @@ def main():
     print("Script completed successfully.")
 
 if __name__ == '__main__':
-    main()
+    main(event=None, context=None)
