@@ -3,11 +3,32 @@ import requests
 import psycopg2
 from psycopg2 import extras
 import datetime
+import boto3
+import json
 
 # Fetching values from environment variables
-SEATGEEK_CLIENT_ID = os.environ.get('SEATGEEK_CLIENT_ID')
-SEATGEEK_CLIENT_SECRET = os.environ.get('SEATGEEK_CLIENT_SECRET')
-DATABASE_URL = os.environ.get('DATABASE_URL')
+# SEATGEEK_CLIENT_ID = os.environ.get('SEATGEEK_CLIENT_ID')
+# SEATGEEK_CLIENT_SECRET = os.environ.get('SEATGEEK_CLIENT_SECRET')
+# DATABASE_URL = os.environ.get('DATABASE_URL')
+# Super top secret
+secrets = get_secret("MyDatabaseCredentials")
+SEATGEEK_CLIENT_ID = secrets['SEATGEEK_CLIENT_ID']
+SEATGEEK_CLIENT_SECRET = secrets['SEATGEEK_CLIENT_SECRET']
+DATABASE_URL = secrets['DATABASE_URL']
+
+
+def get_secret(secret_name):
+    client = boto3.client('secretsmanager')
+    try:
+        get_secret_value_response = client.get_secret_value(SecretId=secret_name)
+    except Exception as e:
+        raise e
+    else:
+        if 'SecretString' in get_secret_value_response:
+            secret = get_secret_value_response['SecretString']
+            return json.loads(secret)
+        else:
+            raise Exception("Secret not found")
 
 def fetch_events():
     api_url = 'https://api.seatgeek.com/2/events'
@@ -216,7 +237,7 @@ def main(event, context):
     events = fetch_events()
     if events:
         parsed_data = parse_event_data(events)
-        batch_update_events(parsed_data)  # Replace update_data with batch_update_events
+        batch_update_events(parsed_data)
         delete_past_events()
         clear_old_price_data()
     print("Script completed successfully.")

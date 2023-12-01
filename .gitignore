@@ -28,7 +28,7 @@ venv.bak/
 *.db
 *.sqlite3
 *.sqlite3-journal
-updated_function.zip
+test3function.zip
 psycopg2forAWS
 python
 
