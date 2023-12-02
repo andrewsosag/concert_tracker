@@ -11,11 +11,6 @@ import json
 # SEATGEEK_CLIENT_SECRET = os.environ.get('SEATGEEK_CLIENT_SECRET')
 # DATABASE_URL = os.environ.get('DATABASE_URL')
 # Super top secret
-secrets = get_secret("MyDatabaseCredentials")
-SEATGEEK_CLIENT_ID = secrets['SEATGEEK_CLIENT_ID']
-SEATGEEK_CLIENT_SECRET = secrets['SEATGEEK_CLIENT_SECRET']
-DATABASE_URL = secrets['DATABASE_URL']
-
 
 def get_secret(secret_name):
     client = boto3.client('secretsmanager')
@@ -29,6 +24,11 @@ def get_secret(secret_name):
             return json.loads(secret)
         else:
             raise Exception("Secret not found")
+        
+secrets = get_secret("MyDatabaseCredentials")
+SEATGEEK_CLIENT_ID = secrets['SEATGEEK_CLIENT_ID']
+SEATGEEK_CLIENT_SECRET = secrets['SEATGEEK_CLIENT_SECRET']
+DATABASE_URL = secrets['DATABASE_URL']
 
 def fetch_events():
     api_url = 'https://api.seatgeek.com/2/events'
