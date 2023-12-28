@@ -38,3 +38,16 @@ ticket_scraper_lambda3.zip
 
 # API Keys
 config.py
+
+# GCP
+concert-price-tracker-5921b-firebase-adminsdk-ujei5-975fd322a8.json
+ui-debug.log
+firestore-debug.log
+firebase-debug.log
+functions/.gitignore
+.firebaserc
+
+
+# Files in Testing
+app.py
+
