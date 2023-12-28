@@ -7,7 +7,7 @@ import datetime
 import logging
 import requests
 import base64
-from functions_framework import pubsub
+# from functions_framework import pubsub
 import os
 
 # Initialize Firebase Admin
@@ -134,24 +134,16 @@ def clean_up_old_data():
 
 @pubsub.subscribe("concert-data-update")
 def main_function(event, context):
-    """
-    Background Cloud Function to be triggered by Pub/Sub.
-    Args:
-         event (dict): The dictionary with data specific to this type of event.
-         context (google.cloud.functions.Context): Metadata of triggering event.
-    Returns:
-        None; the output is written to Stackdriver Logging
-    """
     logging.basicConfig(level=logging.INFO)
     logging.info("Starting script...")
 
-    # Fetch the API key from environment variable
     TICKETMASTER_API_KEY = os.environ.get('TICKETMASTER_API_KEY')
-    
-    # Fetch, parse, and process events
     raw_events = fetch_events(TICKETMASTER_API_KEY)
     parsed_data = parse_event_data(raw_events)
-    update_database(parsed_data)  # Update the database with new data
+    update_database(parsed_data)
     clean_up_old_data()
 
     logging.info("Script completed successfully.")
+
+if __name__ == "__main__":
+    main_function(None, None)
