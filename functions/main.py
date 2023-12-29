@@ -2,16 +2,21 @@
 
 # Import necessary libraries
 import firebase_admin
-from firebase_admin import firestore
+from firebase_admin import credentials, firestore
+from firebase_functions import pubsub_fn
 import datetime
 import logging
 import requests
 import base64
-# from functions_framework import pubsub
 import os
 
-# Initialize Firebase Admin
-firebase_admin.initialize_app()
+service_account_path = 'concert-price-tracker-5921b-1b44f28c1652.json'
+
+# Initialize Firebase Admin with explicit credentials
+if not firebase_admin._apps:
+    cred = credentials.Certificate(service_account_path)
+    firebase_admin.initialize_app(cred)
+
 db = firestore.client()
 
 def fetch_events(api_key):
@@ -132,8 +137,8 @@ def clean_up_old_data():
     for event in old_events:
         events_ref.document(event.id).delete()
 
-@pubsub.subscribe("concert-data-update")
-def main_function(event, context):
+@pubsub_fn.on_message_published(topic="concert-data-update")
+def main_function(event: pubsub_fn.CloudEvent[pubsub_fn.MessagePublishedData]) -> None:
     logging.basicConfig(level=logging.INFO)
     logging.info("Starting script...")
 
@@ -144,6 +149,3 @@ def main_function(event, context):
     clean_up_old_data()
 
     logging.info("Script completed successfully.")
-
-if __name__ == "__main__":
-    main_function(None, None)
